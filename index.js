@@ -1,10 +1,13 @@
 window.onload = load;
 
 const direction = { x: 1, y: 0 };
-const GRID_SIZE = 10;
+const GRID_SIZE = 12;
 const PLAYER_SIZE = 50;
 const FOOD_SIZE = 20;
 const FOOD_OFFSET = (PLAYER_SIZE - FOOD_SIZE) / 2;
+const CANVAS_SIZE = GRID_SIZE * PLAYER_SIZE;
+let TIME_INTERVAL = 500;
+
 let play = true;
 let nextId = 0;
 
@@ -18,8 +21,8 @@ for (let i = 0; i < GRID_SIZE; i++) {
 function load() {
     const canvas = window.gameCanvas;
     const ctx = canvas.getContext("2d");
-    canvas.height = GRID_SIZE * PLAYER_SIZE;
-    canvas.width = GRID_SIZE * PLAYER_SIZE;
+    canvas.height = CANVAS_SIZE;
+    canvas.width = CANVAS_SIZE;
 
     grid[4][4] = { x: 4, y: 4, type: 0, next: true, id: nextId };
     nextId++;
@@ -44,6 +47,14 @@ function changeDirection(key) {
     } else if (key === 'ArrowRight') {
         direction.x = 1;
         direction.y = 0;
+    } else if (key === 'q') {
+        TIME_INTERVAL -= 100;
+    } else if (key === 'a') {
+        TIME_INTERVAL += 100;
+    }
+
+    if (TIME_INTERVAL <= 100) {
+        TIME_INTERVAL = 100;
     }
 }
 
@@ -52,19 +63,19 @@ function gameLoop({ ctx, headX, headY, time }) {
     const diff = now - time;
     let newTime;
 
-    if (diff < 500) {
+    if (diff < TIME_INTERVAL) {
         newTime = time;
     } else {
         let addCell = false;
 
-        ctx.clearRect(0, 0, GRID_SIZE * PLAYER_SIZE, GRID_SIZE * PLAYER_SIZE);
+        ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
         // set snake head for loop
         let snakeCell = grid[headX][headY];
 
         // remember last snake cell pos for trail
-        let lastX = snakeCell.x + direction.x;
-        let lastY = snakeCell.y + direction.y;
+        let lastX = (GRID_SIZE + (snakeCell.x + direction.x)) % GRID_SIZE;
+        let lastY = (GRID_SIZE + (snakeCell.y + direction.y)) % GRID_SIZE;
 
         // move snake cells
         while (snakeCell.next) {
@@ -78,22 +89,16 @@ function gameLoop({ ctx, headX, headY, time }) {
                 if (nextCell.type === 1) {
                     addCell = true;
                     // if player hits self, game over
-                } else if (nextCell.type === 0 && nextCell.id !== snakeCell.id) {
-                    console.log(nextCell, snakeCell);
-                    console.log(lastX, lastY);
+                } else if (nextCell.type === 0 && !(nextCell.id in [snakeCell.id, snakeCell.id + 1])) {
                     play = false;
                 }
             }
 
             // if last cell and add cell, add new cell 
             if (snakeCell.next === true && addCell) {
-                const newCellX = snakeCell.x - direction.x
-                const newCellY = snakeCell.y - direction.y
-
-                grid[newCellX][newCellY] = { x: newCellX, y: newCellY, type: 0, next: true, id: nextId };
-                nextId ++;
-                
-                snakeCell.next = grid[newCellX][newCellY];
+                // don't place the cell in the grid, leave until next iteration
+                snakeCell.next = { type: 0, next: true, id: nextId };
+                nextId++;
                 addCell = false;
             }
 
@@ -106,18 +111,23 @@ function gameLoop({ ctx, headX, headY, time }) {
             lastY = cellY;
         }
 
-        // remove last reference to prevent left over cells
-        grid[lastX][lastY] = {};
+        // if new cell was added, the last cell will be the new cell, 
+        // which has no previous location, so lastX,lastY will be undefined
+        if (grid[lastX]) {
+            // remove last reference to prevent left over cells
+            grid[lastX][lastY] = {};
+        }
 
         // update snake head
-        headX += direction.x;
-        headY += direction.y;
+        headX = (GRID_SIZE + (headX + direction.x)) % GRID_SIZE;
+        headY = (GRID_SIZE + (headY + direction.y)) % GRID_SIZE;
 
         // loop through the grid, draw
+        const snakeColour = getRandomColour();
         grid.forEach(row => {
             row.forEach(cell => {
                 if (cell.type === 0) {
-                    drawSquare(cell.x * PLAYER_SIZE, cell.y * PLAYER_SIZE, PLAYER_SIZE, '', ctx);
+                    drawSquare(cell.x * PLAYER_SIZE, cell.y * PLAYER_SIZE, PLAYER_SIZE, snakeColour, ctx);
                 } else {
                     drawSquare(cell.x * PLAYER_SIZE + FOOD_OFFSET, cell.y * PLAYER_SIZE + FOOD_OFFSET, FOOD_SIZE, cell.colour, ctx);
                 }
@@ -153,6 +163,12 @@ function gameLoop({ ctx, headX, headY, time }) {
             headX,
             headY
         }));
+    } else {
+        // display message
+        ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+        ctx.fillStyle = 'black';
+        ctx.font = '48px serif';
+        ctx.fillText('You Noob', CANVAS_SIZE / 2 - 85, CANVAS_SIZE / 2);
     }
 }
 
