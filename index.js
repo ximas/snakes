@@ -1,6 +1,7 @@
 window.onload = load;
 
-const DIRECTION = { x: 1, y: 0 };
+const DIRECTION_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+let LAST_DIRECTION_KEY = '';
 
 const CELL_SIZE = 50;
 const GRID_X = Math.floor((window.innerWidth - 100) / CELL_SIZE);
@@ -25,42 +26,34 @@ let TIME_INTERVAL = 350;
 let PLAY = true;
 let NEXTID = 0;
 
-// make grid
-const grid = [];
-for (let i = 0; i < GRID_X; i++) {
-    grid.push(Array(GRID_Y).fill({}));
-}
-
 // init
 function load() {
     const canvas = window.gameCanvas;
     const ctx = canvas.getContext("2d");
+    const direction = { x: 1, y: 0 };
+
     canvas.height = CANVAS_Y;
     canvas.width = CANVAS_X;
+
+    // make grid
+    const grid = [];
+    for (let i = 0; i < GRID_X; i++) {
+        grid.push(Array(GRID_Y).fill({}));
+    }
 
     grid[4][4] = { x: 4, y: 4, type: 0, next: true, id: NEXTID };
     NEXTID++;
 
-    document.addEventListener('keydown', event => {
-        changeDirection(event.key)
-    })
+    document.addEventListener('keydown', keyDownHandler);
 
-    gameLoop({ ctx, headX: 4, headY: 4, time: 0 });
+    gameLoop({ ctx, headX: 4, headY: 4, time: 0, direction, grid });
 }
 
-function changeDirection(key) {
-    if (key === 'ArrowUp') {
-        DIRECTION.x = 0;
-        DIRECTION.y = -1;
-    } else if (key === 'ArrowDown') {
-        DIRECTION.x = 0;
-        DIRECTION.y = 1;
-    } else if (key === 'ArrowLeft') {
-        DIRECTION.x = -1;
-        DIRECTION.y = 0;
-    } else if (key === 'ArrowRight') {
-        DIRECTION.x = 1;
-        DIRECTION.y = 0;
+function keyDownHandler(event) {
+    const key = event.key;
+
+    if (DIRECTION_KEYS.includes(key)) {
+        LAST_DIRECTION_KEY = key;
     } else if (key === 'q') {
         TIME_INTERVAL -= 100;
     } else if (key === 'a') {
@@ -72,7 +65,27 @@ function changeDirection(key) {
     }
 }
 
-function gameLoop({ ctx, headX, headY, time }) {
+function handleDirection({ x, y }) {
+    if (LAST_DIRECTION_KEY === 'ArrowUp') {
+        x = 0;
+        y = -1;
+    } else if (LAST_DIRECTION_KEY === 'ArrowDown') {
+        x = 0;
+        y = 1;
+    } else if (LAST_DIRECTION_KEY === 'ArrowLeft') {
+        x = -1;
+        y = 0;
+    } else if (LAST_DIRECTION_KEY === 'ArrowRight') {
+        x = 1;
+        y = 0;
+    }
+
+    LAST_DIRECTION_KEY = '';
+
+    return { x, y };
+}
+
+function gameLoop({ ctx, headX, headY, time, direction, grid }) {
     const now = Date.now();
     const diff = now - time;
     let newTime;
@@ -81,15 +94,34 @@ function gameLoop({ ctx, headX, headY, time }) {
         newTime = time;
     } else {
         let addCell = false;
-
+        const snakeHead = grid[headX][headY];
         ctx.clearRect(0, 0, CANVAS_X, CANVAS_Y);
 
+        // calculate possible new direction
+        const newDirection = handleDirection(direction);
         // set snake head for loop
-        let snakeCell = grid[headX][headY];
+        let snakeCell = snakeHead;
+        // calculate new head position, remember last cell position for tail
+        let moveToX = (GRID_X + (snakeCell.x + newDirection.x)) % GRID_X;
+        let moveToY = (GRID_Y + (snakeCell.y + newDirection.y)) % GRID_Y;
 
-        // remember last snake cell pos for trail
-        let lastX = (GRID_X + (snakeCell.x + DIRECTION.x)) % GRID_X;
-        let lastY = (GRID_Y + (snakeCell.y + DIRECTION.y)) % GRID_Y;
+        console.log('');
+        console.log(newDirection);
+        console.log(grid[moveToX][moveToY])
+        console.log(grid[moveToX][moveToY].id)
+        
+
+        // revert direction if moveToCell is cell 1 (1st after head)
+        if (grid[moveToX][moveToY].id === 1) {
+            console.log(direction);
+
+
+            moveToX = (GRID_X + (snakeCell.x + direction.x)) % GRID_X;
+            moveToY = (GRID_Y + (snakeCell.y + direction.y)) % GRID_Y;
+            // set new direction if the direction is valid 
+        } else {
+            direction = newDirection
+        }
 
         // move snake cells
         while (snakeCell.next) {
@@ -98,12 +130,12 @@ function gameLoop({ ctx, headX, headY, time }) {
 
             // only head can consume or die
             if (snakeCell.id === 0) {
-                const nextCell = grid[lastX][lastY];
+                const moveToCell = grid[moveToX][moveToY];
                 // if player hits food, consume
-                if (nextCell.type === 1) {
+                if (moveToCell.type === 1) {
                     addCell = true;
                     // if player hits self, game over
-                } else if (nextCell.type === 0 && !(nextCell.id in [snakeCell.id, snakeCell.id + 1])) {
+                } else if (moveToCell.type === 0) {
                     PLAY = false;
                 }
             }
@@ -116,25 +148,25 @@ function gameLoop({ ctx, headX, headY, time }) {
                 addCell = false;
             }
 
-            grid[lastX][lastY] = snakeCell;
-            snakeCell.x = lastX;
-            snakeCell.y = lastY;
+            grid[moveToX][moveToY] = snakeCell;
+            snakeCell.x = moveToX;
+            snakeCell.y = moveToY;
             snakeCell = snakeCell.next;
 
-            lastX = cellX;
-            lastY = cellY;
+            moveToX = cellX;
+            moveToY = cellY;
         }
 
         // if new cell was added, the last cell will be the new cell, 
-        // which has no previous location, so lastX,lastY will be undefined
-        if (grid[lastX]) {
+        // which has no previous location, so moveToX, moveToY will be undefined
+        if (grid[moveToX]) {
             // remove last reference to prevent left over cells
-            grid[lastX][lastY] = {};
+            grid[moveToX][moveToY] = {};
         }
 
         // update snake head
-        headX = (GRID_X + (headX + DIRECTION.x)) % GRID_X;
-        headY = (GRID_Y + (headY + DIRECTION.y)) % GRID_Y;
+        headX = (GRID_X + (headX + direction.x)) % GRID_X;
+        headY = (GRID_Y + (headY + direction.y)) % GRID_Y;
 
         // loop through the grid, draw
         const snakeColour = getRandomColour();
@@ -178,7 +210,9 @@ function gameLoop({ ctx, headX, headY, time }) {
             ctx,
             time: newTime,
             headX,
-            headY
+            headY,
+            direction,
+            grid
         }));
     } else {
         // display message
@@ -259,8 +293,6 @@ function drawCellLink(x, y, dx, dy, colour, ctx) {
         y1 = (y + 0.5) * CELL_SIZE;
         // calculate y at edge - down for pos, up for neg
         y2 = y1 + (dy * CELL_SIZE);
-
-        console.log(y1, y2, dy);
 
     } else {
         // calculate top and bottom ys
