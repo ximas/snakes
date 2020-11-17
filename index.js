@@ -1,14 +1,41 @@
 window.onload = load;
 
-const DIRECTION_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
-let LAST_DIRECTION_KEY = '';
+const DIRECTION_KEYS = {
+    'ArrowUp': 'up',
+    'ArrowDown': 'down',
+    'ArrowLeft': 'left',
+    'ArrowRight': 'right'
+};
 
-const CELL_SIZE = 50;
-const GRID_X = Math.floor((window.innerWidth - 100) / CELL_SIZE);
-const GRID_Y = Math.floor((window.innerHeight - 100) / CELL_SIZE);
+let LAST_DIRECTION = '';
 
-const CANVAS_X = GRID_X * CELL_SIZE;
-const CANVAS_Y = GRID_Y * CELL_SIZE;
+// cell size in px
+const CELL_SIZE = 100;
+
+const STATS_HEIGHT = 100;
+
+// number of grid cells in each dimension
+const GRID_X = Math.floor((window.innerWidth - 10) / CELL_SIZE);
+const GRID_Y = Math.floor((window.innerHeight - STATS_HEIGHT - 10) / CELL_SIZE);
+
+// visible grid in px
+const GRID_WIDTH = GRID_X * CELL_SIZE;
+const GRID_HEIGHT = GRID_Y * CELL_SIZE;
+
+// visible canvas in px (not the same as grid size because of options/stats)
+const CANVAS_WIDTH = GRID_WIDTH;
+const CANVAS_HEIGHT = GRID_HEIGHT + STATS_HEIGHT;
+
+// get 30% of smallest number of grid cells to define touch regions
+const numGridSquare = Math.floor(Math.min(GRID_X, GRID_Y) * 0.4);
+// get canvas boundary from approximated grid boundary
+const gridBoundary = numGridSquare * CELL_SIZE;
+
+// boundaries for touch regions
+const TOP_REGION = gridBoundary;
+const BOTTOM_REGION = GRID_HEIGHT - gridBoundary;
+const LEFT_REGION = gridBoundary;
+const RIGHT_REGION = GRID_WIDTH - gridBoundary;
 
 const HEAD_SIZE = 40;
 const HEAD_OFFSET = (CELL_SIZE - HEAD_SIZE) / 2;
@@ -22,9 +49,7 @@ const LINK_OFFSET = (CELL_SIZE - LINK_SIZE) / 2
 const FOOD_SIZE = 10;
 const FOOD_OFFSET = (CELL_SIZE - FOOD_SIZE) / 2;
 
-let TIME_INTERVAL = 350;
-let PLAY = true;
-let NEXTID = 0;
+let TIME_INTERVAL = 500;
 
 // init
 function load() {
@@ -32,8 +57,8 @@ function load() {
     const ctx = canvas.getContext("2d");
     const direction = { x: 1, y: 0 };
 
-    canvas.height = CANVAS_Y;
-    canvas.width = CANVAS_X;
+    canvas.height = CANVAS_HEIGHT;
+    canvas.width = CANVAS_WIDTH;
 
     // make grid
     const grid = [];
@@ -41,19 +66,57 @@ function load() {
         grid.push(Array(GRID_Y).fill({}));
     }
 
-    grid[4][4] = { x: 4, y: 4, type: 0, next: true, id: NEXTID };
-    NEXTID++;
+    grid[4][4] = { x: 4, y: 4, type: 0, next: true, id: 0 };
 
     document.addEventListener('keydown', keyDownHandler);
+    canvas.addEventListener('click', mouseClickHandler);
 
-    gameLoop({ ctx, headX: 4, headY: 4, time: 0, direction, grid });
+    gameLoop({ ctx, headX: 4, headY: 4, time: 0, direction, grid, nextId: 1 });
+}
+
+function mouseClickHandler(event) {
+    if (event.button === 0) {
+        const bound = event.target.getBoundingClientRect();
+        const mousex = event.clientX - bound.x;
+        const mousey = event.clientY - bound.y;
+
+        const direction = getDirectionFromRegion(mousex, mousey);
+        if (direction) {
+            LAST_DIRECTION = direction;
+        }
+    }
+}
+
+function getDirectionFromRegion(x, y) {
+    const leftRegion = x >= 0 && x < LEFT_REGION;
+    const rightRegion = x >= RIGHT_REGION && x <= GRID_WIDTH;
+    const topRegion = y >= 0 && y < TOP_REGION;
+    const bottomRegion = y >= BOTTOM_REGION && y <= GRID_HEIGHT;
+
+    let direction;
+
+    if ((topRegion || bottomRegion) && !leftRegion && !rightRegion) {
+        if (topRegion) {
+            direction = 'up';
+        } else {
+            direction = 'down';
+        }
+    } else if ((leftRegion || rightRegion) && !topRegion && !bottomRegion) {
+        if (leftRegion) {
+            direction = 'left';
+        } else {
+            direction = 'right';
+        }
+    }
+
+    return direction;
 }
 
 function keyDownHandler(event) {
     const key = event.key;
 
-    if (DIRECTION_KEYS.includes(key)) {
-        LAST_DIRECTION_KEY = key;
+    if (key in DIRECTION_KEYS) {
+        LAST_DIRECTION = DIRECTION_KEYS[key];
     } else if (key === 'q') {
         TIME_INTERVAL -= 100;
     } else if (key === 'a') {
@@ -66,36 +129,37 @@ function keyDownHandler(event) {
 }
 
 function handleDirection({ x, y }) {
-    if (LAST_DIRECTION_KEY === 'ArrowUp') {
+    if (LAST_DIRECTION === 'up') {
         x = 0;
         y = -1;
-    } else if (LAST_DIRECTION_KEY === 'ArrowDown') {
+    } else if (LAST_DIRECTION === 'down') {
         x = 0;
         y = 1;
-    } else if (LAST_DIRECTION_KEY === 'ArrowLeft') {
+    } else if (LAST_DIRECTION === 'left') {
         x = -1;
         y = 0;
-    } else if (LAST_DIRECTION_KEY === 'ArrowRight') {
+    } else if (LAST_DIRECTION === 'right') {
         x = 1;
         y = 0;
     }
 
-    LAST_DIRECTION_KEY = '';
+    LAST_DIRECTION = '';
 
     return { x, y };
 }
 
-function gameLoop({ ctx, headX, headY, time, direction, grid }) {
+function gameLoop({ ctx, headX, headY, time, direction, grid, nextId }) {
     const now = Date.now();
     const diff = now - time;
     let newTime;
+    let play = true;
 
     if (diff < TIME_INTERVAL) {
         newTime = time;
     } else {
         let addCell = false;
         const snakeHead = grid[headX][headY];
-        ctx.clearRect(0, 0, CANVAS_X, CANVAS_Y);
+        ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
         // calculate possible new direction
         const newDirection = handleDirection(direction);
@@ -104,12 +168,6 @@ function gameLoop({ ctx, headX, headY, time, direction, grid }) {
         // calculate new head position, remember last cell position for tail
         let moveToX = (GRID_X + (snakeCell.x + newDirection.x)) % GRID_X;
         let moveToY = (GRID_Y + (snakeCell.y + newDirection.y)) % GRID_Y;
-
-        console.log('');
-        console.log(newDirection);
-        console.log(grid[moveToX][moveToY])
-        console.log(grid[moveToX][moveToY].id)
-        
 
         // revert direction if moveToCell is cell 1 (1st after head)
         if (grid[moveToX][moveToY].id === 1) {
@@ -136,15 +194,15 @@ function gameLoop({ ctx, headX, headY, time, direction, grid }) {
                     addCell = true;
                     // if player hits self, game over
                 } else if (moveToCell.type === 0) {
-                    PLAY = false;
+                    play = false;
                 }
             }
 
             // if last cell and add cell, add new cell 
             if (snakeCell.next === true && addCell) {
                 // don't place the cell in the grid, leave until next iteration
-                snakeCell.next = { type: 0, next: true, id: NEXTID };
-                NEXTID++;
+                snakeCell.next = { type: 0, next: true, id: nextId };
+                nextId++;
                 addCell = false;
             }
 
@@ -173,7 +231,16 @@ function gameLoop({ ctx, headX, headY, time, direction, grid }) {
         grid.forEach((cellCol, col) => {
             cellCol.forEach((cell, row) => {
                 // draw black box on cell
-                ctx.strokeRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+
+                const boxx = col * CELL_SIZE;
+                const boxy = row * CELL_SIZE;
+                const boxLocation = getDirectionFromRegion(boxx, boxy);
+                if (boxLocation) {
+                    ctx.strokeStyle = 'red';
+                } else {
+                    ctx.strokeStyle = 'black';
+                }
+                ctx.strokeRect(boxx, boxy, CELL_SIZE, CELL_SIZE);
 
                 if (cell.type === 0) {
                     drawSnakeCell(cell, snakeColour, ctx);
@@ -205,21 +272,22 @@ function gameLoop({ ctx, headX, headY, time, direction, grid }) {
         newTime = now;
     }
 
-    if (PLAY) {
+    if (play) {
         requestAnimationFrame(() => gameLoop({
             ctx,
             time: newTime,
             headX,
             headY,
             direction,
-            grid
+            grid,
+            nextId
         }));
     } else {
         // display message
-        ctx.clearRect(0, 0, CANVAS_X, CANVAS_Y);
+        ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         ctx.fillStyle = 'black';
         ctx.font = '48px serif';
-        ctx.fillText('You Noob', CANVAS_X / 2 - 85, CANVAS_Y / 2);
+        ctx.fillText('You Noob', CANVAS_WIDTH / 2 - 85, CANVAS_HEIGHT / 2);
     }
 }
 
@@ -278,7 +346,6 @@ function drawRectAbs(_x1, _y1, _x2, _y2, colour, ctx, minx = 0, miny = 0) {
     ctx.fillStyle = colour || getRandomColour();
     ctx.fillRect(x1, y1, width, height);
 }
-
 
 // draw link between snake cells
 function drawCellLink(x, y, dx, dy, colour, ctx) {
