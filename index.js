@@ -205,9 +205,9 @@ function drawStats(score, ctx) {
 async function endGame(score, ctx) {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     ctx.fillStyle = 'white';
-    ctx.font = '48px serif';
-    ctx.fillText(PLAYER, CANVAS_WIDTH / 2 - 200, 120);
-    ctx.fillText(`You Noob, Score: ${score}`, CANVAS_WIDTH / 2 - 200, 160);
+    ctx.font = '40px serif';
+    ctx.fillText(PLAYER, CANVAS_WIDTH / 2 - 200, 70);
+    ctx.fillText(`You Noob, Score: ${score}`, CANVAS_WIDTH / 2 - 200, 150);
     
     await fetch('/snake/uploadScore.php', {
         method: 'post',
@@ -222,7 +222,7 @@ async function endGame(score, ctx) {
     
     ctx.fillText('Hall of fame', CANVAS_WIDTH / 2 - 200, 220);
     scores.forEach((_score, idx) => {
-        ctx.fillText(`${idx+1} - ${_score.name}: ${_score.score}`, CANVAS_WIDTH / 2 - 200, 260 + (idx * 40));
+        ctx.fillText(`${idx+1} - ${_score.name}: ${_score.score}`, CANVAS_WIDTH / 2 - 200, 270 + (idx * 50));
     });
 }
 
